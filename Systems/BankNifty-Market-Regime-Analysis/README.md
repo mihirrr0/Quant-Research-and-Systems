@@ -64,9 +64,6 @@ Using the trend and noise classifications, I assigned each day to one of six buc
 
 
 
----
-
----
 ### 3. Yearly and Monthly Bucket Trends
 [![Screenshot-2024-11-24-at-10-58-06-AM.png](https://i.postimg.cc/wT3SMmDT/Screenshot-2024-11-24-at-10-58-06-AM.png)](https://postimg.cc/jL08kC8G)
 
