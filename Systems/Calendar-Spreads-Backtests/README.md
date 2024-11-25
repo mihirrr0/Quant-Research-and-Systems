@@ -5,7 +5,7 @@ A calendar spread is an options trading strategy where we simultaneously hold a 
 ## **Backtest Details**
 
 ### Data Used:
-- Options data for **Bank Nifty weekly contracts** (Weeks I, II, III, IV) and **monthly contracts** (Months I, II).
+- Index options data for **weekly contracts** (Weeks I, II, III, IV) and **monthly contracts** (Months I, II).
 - Different expiry dates were analyzed to evaluate performance.
 
 ## **Optimizations**
