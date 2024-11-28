@@ -1,0 +1,130 @@
+_SECTION_BEGIN("Price Visualization");
+SetChartOptions(0, chartShowArrows | chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+Plot(C, "Closing Price", ParamColor("Line Color", colorDefault), styleNoTitle | ParamStyle("Style") | GetPriceStyle());
+
+#include <BankNifty_StrikeSelector.afl>
+
+SetOption("InitialCapital", 10000000);
+SetOption("MarginRequirement", 100);
+MaxPositions = 2;
+SetOption("MaxOpenPositions", MaxPositions);
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+EntryScenario = Optimize("EntryCase", 0, 0, 14, 2);
+
+if (EntryScenario == 0) { EntryTime = 091500; }
+if (EntryScenario == 1) { EntryTime = 093000; }
+if (EntryScenario == 2) { EntryTime = 094500; }
+if (EntryScenario == 3) { EntryTime = 100000; }
+if (EntryScenario == 4) { EntryTime = 101500; }
+if (EntryScenario == 5) { EntryTime = 103000; }
+if (EntryScenario == 6) { EntryTime = 104500; }
+if (EntryScenario == 7) { EntryTime = 110000; }
+if (EntryScenario == 8) { EntryTime = 111500; }
+if (EntryScenario == 9) { EntryTime = 113000; }
+if (EntryScenario == 10) { EntryTime = 114500; }
+if (EntryScenario == 11) { EntryTime = 120000; }
+if (EntryScenario == 12) { EntryTime = 121500; }
+if (EntryScenario == 13) { EntryTime = 123000; }
+if (EntryScenario == 14) { EntryTime = 124500; }
+if (EntryScenario == 15) { EntryTime = 130000; }
+
+ExitTime = 152000;
+
+BarIdx = BarIndex();
+IsLastBar = BarIdx == LastValue(BarIdx - 1);
+
+HolidayDates = DateNum() != 1111026 AND DateNum() != 1121113 AND DateNum() != 1131103 AND DateNum() != 1141023 AND DateNum() != 1151111 AND DateNum() != 1161030 AND DateNum() != 1171019 AND DateNum() != 1181107 AND DateNum() != 1191027 AND DateNum() != 1201114 AND DateNum() != 1211104;
+
+EquityPercentage = Optimize("EquityAllocation", 2, 1, 5, 1);
+
+CallOption = StrLeft(Name(), 20) + "CE";
+PutOption = StrLeft(Name(), 20) + "PE";
+
+CallPrice = IIf(Type == "CE", Foreign(CallOption, "Close"), Null);
+PutPrice = IIf(Type == "PE", Foreign(PutOption, "Close"), Null);
+
+LotAllocation = IIf(DateNum() >= 1110101 AND DateNum() <= 1151029, 25,
+         IIf(DateNum() >= 1151030 AND DateNum() <= 1160630, 30,
+         IIf(DateNum() >= 1160701 AND DateNum() <= 1181025, 40,
+         IIf(DateNum() >= 1181026 AND DateNum() <= 1200730, 20, 25))));
+
+MaxAllowedEntries = 8;
+DefaultLeverage = 12;
+
+LeverageMIS = 12;
+CapitalRequired = ((Foreign("$BANKNIFTY-NSE", "Close") * LotAllocation * 2) / LeverageMIS);
+MinimumPremium = (CapitalRequired * (EquityPercentage / 100)) / LotAllocation;
+EffectiveMinPremium = (((Foreign("$BANKNIFTY-NSE", "Close") * LotAllocation * 2) / DefaultLeverage) * (EquityPercentage / 100)) / LotAllocation;
+CallSelection = IIF(Type == "CE", abs(CallPrice - MinimumPremium), Null);
+PutSelection = IIF(Type == "PE", abs(PutPrice - MinimumPremium), Null);
+CallWeight = IIf(CallPrice >= EffectiveMinPremium, 1, CallPrice / EffectiveMinPremium);
+PutWeight = IIf(PutPrice >= EffectiveMinPremium, 1, PutPrice / EffectiveMinPremium);
+PositionRank = IIf(Type == "CE" AND StrikePriceSelector == 1, 100000 - CallSelection,
+                  IIf(Type == "PE" AND StrikePriceSelector == 1, 100000 - PutSelection, Null));
+TradeSize = IIf(Type == "CE", -CallWeight * EquityPercentage, -PutWeight * EquityPercentage);
+
+SellSignal = StrikePriceSelector == 1 AND TimeNum() == EntryTime AND HolidayDates;
+SellPrice = Close;
+
+ExitSignal = TimeNum() == ExitTime OR IsLastBar OR DateNum() != Ref(DateNum(), 1);
+ExitPrice = Close;
+
+SellSignal = ExRem(SellSignal, ExitSignal);
+ExitSignal = ExRem(ExitSignal, SellSignal);
+
+StopLossPercent = IIf(DayOfWeek() == 4, 50, IIf(DayOfWeek() == 3, 40, IIf(DayOfWeek() == 2, 40, IIf(DayOfWeek() == 1, 30, IIf(DayOfWeek() == 5, 30, 50)))));
+ApplyStop(stopTypeLoss, stopModePercent, StopLossPercent, 1);
+
+PlotShapes(SellSignal * shapeDownArrow, colorWhite, 0, H, -10);
+PlotShapes(ExitSignal * shapeUpArrow, colorWhite, 0, L, -10);
+
+SetCustomBacktestProc("");
+
+EntryLimit = 1;
+if (Status("action") == actionPortfolio) {
+    BacktestObj = GetBacktesterObject();
+    BacktestObj.PreProcess();
+    IndexClose = Foreign("$BANKNIFTY-NSE", "Close");
+
+    for (Idx = 0; Idx < BarCount; Idx++) {
+        PortfolioCapital = 10000000;
+
+        CECount = 0;
+        PECount = 0;
+
+        for (Signal = BacktestObj.GetFirstSignal(Idx); Signal; Signal = BacktestObj.GetNextSignal(Idx)) {
+            OptionType = StrRight(Signal.Symbol, 2);
+
+            if (Signal.IsEntry() AND OptionType == "PE") {
+                if (PECount < EntryLimit)
+                    PECount++;
+                else
+                    Signal.Price = -1;
+            }
+
+            if (Signal.IsEntry() AND OptionType == "CE") {
+                if (CECount < EntryLimit)
+                    CECount++;
+                else
+                    Signal.Price = -1;
+            }
+        }
+
+        BacktestObj.ProcessTradeSignals(Idx);
+
+        BacktestObj.UpdateStats(Idx, 1);
+        BacktestObj.UpdateStats(Idx, 2);
+    }
+
+    BacktestObj.PostProcess();
+}
+
+PortfolioEquity = Foreign("~~~EQUITY", "Close");
+
+Filter = 1;
+AddColumn(PortfolioEquity, "Portfolio Equity", 1);
+
+_SECTION_END();
