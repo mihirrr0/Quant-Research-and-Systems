@@ -1,0 +1,87 @@
+_SECTION_BEGIN("Price Visualization");
+SetChartOptions(0, chartShowArrows | chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Vol " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+Plot(C, "Closing Price", ParamColor("Chart Line Color", colorDefault), styleNoTitle | ParamStyle("Chart Style") | GetPriceStyle());
+
+#include <BankNifty_StrikeSelector.afl>
+
+SetOption("InitialCapital", 10000000);
+SetOption("MarginRequirement", 100);
+MaxPositions = 2;
+SetOption("MaxOpenPositions", MaxPositions);
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+EntryCase = Optimize("EntryScenario", 1, 1, 13, 4);
+
+if (EntryCase == 0) { EntryTime = 091500; }
+if (EntryCase == 1) { EntryTime = 093000; }
+if (EntryCase == 2) { EntryTime = 094500; }
+if (EntryCase == 3) { EntryTime = 100000; }
+if (EntryCase == 4) { EntryTime = 101500; }
+if (EntryCase == 5) { EntryTime = 103000; }
+if (EntryCase == 6) { EntryTime = 104500; }
+if (EntryCase == 7) { EntryTime = 110000; }
+if (EntryCase == 8) { EntryTime = 111500; }
+if (EntryCase == 9) { EntryTime = 113000; }
+if (EntryCase == 10) { EntryTime = 114500; }
+if (EntryCase == 11) { EntryTime = 120000; }
+if (EntryCase == 12) { EntryTime = 121500; }
+if (EntryCase == 13) { EntryTime = 123000; }
+if (EntryCase == 14) { EntryTime = 124500; }
+if (EntryCase == 15) { EntryTime = 130000; }
+
+ExitTime = 152000;
+
+BarIndexValue = BarIndex();
+IsLastBar = BarIndexValue == LastValue(BarIndexValue - 1);
+
+ExcludedDates = DateNum() != 1111026 AND DateNum() != 1121113 AND DateNum() != 1131103 AND DateNum() != 1141023 AND DateNum() != 1151111 AND DateNum() != 1161030 AND DateNum() != 1171019 AND DateNum() != 1181107 AND DateNum() != 1191027 AND DateNum() != 1200604 AND DateNum() != 1201114 AND DateNum() != 1211104;
+
+ContractLotSize = IIf(DateNum() >= 1110101 AND DateNum() <= 1151029, 25,
+                 IIf(DateNum() >= 1151030 AND DateNum() <= 1160630, 30,
+                 IIf(DateNum() >= 1160701 AND DateNum() <= 1181025, 40,
+                 IIf(DateNum() >= 1181026 AND DateNum() <= 1200730, 20, 25))));
+
+EquityAllocation = Optimize("EquityPercent", 2, 3, 8, 1);
+
+CallOptionSymbol = StrLeft(Name(), 20) + "CE";
+PutOptionSymbol = StrLeft(Name(), 20) + "PE";
+
+CallOptionPrice = Foreign(CallOptionSymbol, "Close");
+PutOptionPrice = Foreign(PutOptionSymbol, "Close");
+
+CallPremiumSum = IIf(Type == "CE", Foreign(StrLeft(Name(), 20) + "CE", "Close"), 0) +
+                 IIf(Type == "PE", Foreign(StrLeft(Name(), 20) + "PE", "Close"), 0);
+PutPremiumSum = IIf(Type == "PE", Foreign(StrLeft(Name(), 20) + "PE", "Close"), 0) +
+                IIf(Type == "CE", Foreign(StrLeft(Name(), 20) + "CE", "Close"), 0);
+
+MarginExposure = Foreign("$BANKNIFTY-NSE", "Close") * 2 * 0.02 * ContractLotSize;
+MarginSpan = Moneyness * ContractLotSize;
+TotalMarginRequired = MarginExposure + MarginSpan;
+MISMarginLeverage = 12;
+MarginDeposit = (Foreign("$BANKNIFTY-NSE", "Close") * ContractLotSize * 2) / MISMarginLeverage;
+MinimumPremium = (MarginDeposit * (EquityAllocation / 100)) / ContractLotSize;
+
+CallAdjustment = IIf(CallOptionPrice >= MinimumPremium, 1, CallOptionPrice / MinimumPremium);
+PutAdjustment = IIf(PutOptionPrice >= MinimumPremium, 1, PutOptionPrice / MinimumPremium);
+PositionAllocation = IIf(Type == "CE", -CallAdjustment * EquityAllocation, -PutAdjustment * EquityAllocation);
+
+SellSignal = StrikePriceSelector == 1 AND TimeNum() == EntryTime AND ExcludedDates;
+SellPrice = Close;
+
+ExitSignal = TimeNum() == ExitTime OR IsLastBar OR DateNum() != Ref(DateNum(), 1);
+ExitPrice = Close;
+
+SellSignal = ExRem(SellSignal, ExitSignal);
+ExitSignal = ExRem(ExitSignal, SellSignal);
+
+StopLossLevel = Optimize("StopLossPercent", 40, 10, 90, 10);
+ApplyStop(stopTypeLoss, stopModePercent, StopLossLevel, 1);
+
+PortfolioEquity = Foreign("~~~EQUITY", "Close");
+
+Filter = 1;
+AddColumn(PortfolioEquity, "Portfolio Equity", 1);
+
+_SECTION_END();
