@@ -1,0 +1,149 @@
+_SECTION_BEGIN("Price Data Setup");
+SetChartOptions(0, chartShowArrows | chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Volume " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+Plot(C, "Closing Price", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Line Style") | GetPriceStyle());
+_SECTION_END();
+
+#include <BankNifty_StrikePriceLogic.afl>
+
+SetOption("InitialEquity", 10000000);
+SetOption("AccountMargin", 100);
+MaxOpenPositions = 4;
+SetOption("MaxOpenPositions", MaxOpenPositions);
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+TimeSlot = Optimize("TimeSlot", 1, 1, 13, 4);
+
+if (TimeSlot == 0) { EntryTime = 91500; }
+if (TimeSlot == 1) { EntryTime = 93000; }
+if (TimeSlot == 2) { EntryTime = 94500; }
+if (TimeSlot == 3) { Entrytime = 100000; }
+if (TimeSlot == 4) { Entrytime = 101500; }
+if (TimeSlot == 5) { Entrytime = 103000; }
+if (TimeSlot == 6) { Entrytime = 104500; }
+if (TimeSlot == 7) { Entrytime = 110000; }
+if (TimeSlot == 8) { Entrytime = 111500; }
+if (TimeSlot == 9) { Entrytime = 113000; }
+if (TimeSlot == 10) { Entrytime = 114500; }
+if (TimeSlot == 11) { Entrytime = 120000; }
+if (TimeSlot == 12) { Entrytime = 121500; }
+if (TimeSlot == 13) { Entrytime = 123000; }
+if (TimeSlot == 14) { Entrytime = 124500; }
+if (TimeSlot == 15) { EntryTime = 130000; }
+
+ExitTime = 152000;
+
+IndexTracker = BarIndex();
+EndOfBars = IndexTracker == LastValue(IndexTracker - 1);
+
+ExcludedHolidays = DateNum() != 1111026 AND DateNum() != 1121113 AND DateNum() != 1131103 AND DateNum() != 1141023 AND DateNum() != 1151111 AND DateNum() != 1161030 AND DateNum() != 1171019 AND DateNum() != 1181107 AND DateNum() != 1191027 AND DateNum() != 1200604;
+
+CallPremium = ValueWhen(ProtectiveStrikeSelector == 1 AND OptionType == "CE", Foreign(StrLeft(Name(), 15) + (StrikePrice - PremiumBuffer) + "CE", "Close"));
+PutPremium = ValueWhen(ProtectiveStrikeSelector == 1 AND OptionType == "PE", Foreign(StrLeft(Name(), 15) + (StrikePrice + PremiumBuffer) + "PE", "Close"));
+
+EquityPercentage = Optimize("EquityPercent", 5, 3, 8, 1);
+
+LotSize = IIf(DateNum() >= 1110101 AND DateNum() <= 1151029, 25,
+         IIf(DateNum() >= 1151030 AND DateNum() <= 1160630, 30,
+         IIf(DateNum() >= 1160701 AND DateNum() <= 1181025, 40,
+         IIf(DateNum() >= 1181026 AND DateNum() <= 1200730, 20, 25))));
+
+POE = EquityPercentage;
+
+TradePriority = IIf(OptionType == "PE" AND StrikePriceSelector == 1, 1000000,
+                 IIf(OptionType == "PE" AND ProtectiveStrikeSelector == 1, 1000000 - AdjustmentCode,
+                 IIf(OptionType == "CE" AND StrikePriceSelector == 1, 1000000, AdjustmentCode)));
+
+ShortPosition = StrikePriceSelector == 1 AND TimeNum() == EntryTime AND ExcludedHolidays;
+ShortPrice = Close;
+
+StopLoss = 0.40;
+PositionClosePrice = ValueWhen(ShortPosition, Close);
+ExitCondition = High > PositionClosePrice * (1 + StopLoss);
+
+ClosePosition = TimeNum() == ExitTime OR EndOfBars OR DateNum() != Ref(DateNum(), 1) OR ExitCondition;
+ClosePrice = IIf(ExitCondition, PositionClosePrice * (1 + StopLoss), Close);
+
+ShortPosition = ExRem(ShortPosition, ClosePosition);
+ClosePosition = ExRem(ClosePosition, ShortPosition);
+
+LongHedge = ((ProtectiveStrikeSelector == 1 AND TimeNum() == EntryTime AND ExcludedHolidays AND CallPremium < MinPremium AND OptionType == "CE")
+         OR (ProtectiveStrikeSelector == 1 AND TimeNum() == EntryTime AND ExcludedHolidays AND PutPremium < MinPremium AND OptionType == "PE"));
+LongHedgePrice = Close;
+
+HedgeExit = TimeNum() == ExitTime OR EndOfBars OR DateNum() != Ref(DateNum(), 1);
+HedgeExitPrice = Close;
+
+LongHedge = ExRem(LongHedge, HedgeExit);
+HedgeExit = ExRem(HedgeExit, LongHedge);
+
+SetCustomBacktestProc("");
+
+Allocation = POE / 100;
+PositionCap = 1;
+
+if (Status("action") == actionPortfolio) {
+    BacktestManager = GetBacktesterObject();
+    BacktestManager.PreProcess();
+
+    CallStopLoss = 0;
+    PutStopLoss = 0;
+
+    IsNewDay = Day() != Ref(Day(), -1);
+    TradeCount = 0;
+    BankNiftyClosePrice = Foreign("$BANKNIFTY-NSE", "Close");
+
+    for (BarIndex = 0; BarIndex < BarCount; BarIndex++) {
+        CurrentEquity = BacktestManager.Equity;
+
+        CallPositions = 0;
+        PutPositions = 0;
+
+        if (IsNewDay[BarIndex] == 1) {
+            TradeCount = 0;
+        }
+
+        for (Signal = BacktestManager.GetFirstSignal(BarIndex); Signal; Signal = BacktestManager.GetNextSignal(BarIndex)) {
+            if (Signal.IsEntry()) {
+                TradeCount++;
+            }
+        }
+
+        for (Signal = BacktestManager.GetFirstSignal(BarIndex); Signal; Signal = BacktestManager.GetNextSignal(BarIndex)) {
+            OptionType = RightStr(Signal.Symbol, 2);
+            StrikePrice = StrToNum(LeftStr(RightStr(Signal.Symbol, 7), 5));
+
+            CallOptionSymbol = LeftStr(Signal.Symbol, 20) + "CE";
+            PutOptionSymbol = LeftStr(Signal.Symbol, 20) + "PE";
+            CallOptionPrice = Foreign(CallOptionSymbol, "Close");
+            PutOptionPrice = Foreign(PutOptionSymbol, "Close");
+
+            LotSizeForBar = LotSize[BarIndex];
+
+            MaxLeverage = 8;
+            AllocationRatio = Allocation;
+            DepositValue = ((BankNiftyClosePrice * LotSizeForBar * 2) / MaxLeverage);
+            MinPremium = (DepositValue * AllocationRatio) / LotSizeForBar;
+
+            CallMultiplier = IIf(CallOptionPrice >= MinPremium, 1, CallOptionPrice / MinPremium);
+            PutMultiplier = IIf(PutOptionPrice >= MinPremium, 1, PutOptionPrice / MinPremium);
+
+            if (Signal.IsEntry() && Signal.Type == 3 && OptionType == "PE") {
+                Signal.PosSize = (CurrentEquity * Allocation * PutMultiplier);
+            }
+
+            if (Signal.IsEntry() && Signal.Type == 3 && OptionType == "CE") {
+                Signal.PosSize = (CurrentEquity * Allocation * CallMultiplier);
+            }
+        }
+        BacktestManager.ProcessTradeSignals(BarIndex);
+    }
+    BacktestManager.PostProcess();
+}
+
+PortfolioEquity = Foreign("~~~EQUITY", "Close");
+
+Filter = 1;
+AddColumn(PortfolioEquity, "Portfolio Equity", 1);
+_SECTION_END();
