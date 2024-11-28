@@ -1,0 +1,65 @@
+_SECTION_BEGIN("Price Setup");
+
+// Set the timeframe to daily
+TimeFrameSet(inDaily);
+#include <WeeklyExpiryDates.afl>  
+
+// Convert expiry date and current date into a comparable format
+WeeklyOptionExpiry = DateTimeConvert(2, WeeklyExpiryDate);
+CurrentDate = DateTimeConvert(2, DateNum());
+DaysUntilExpiry = round(DateTimeDiff(WeeklyOptionExpiry, CurrentDate) / (3600 * 24));
+TimeFrameRestore();
+
+// Expand the days to expiry for analysis
+ExpandedDaysToExpiry = TimeFrameExpand(DaysUntilExpiry, inDaily, expandFirst);
+
+// Determine if the symbol is for next expiry
+IsNextExpirySymbol = IIf(StrRight(Name(), 2) == "-I", 1, 0);
+
+// Extract strike price based on the expiry type
+StrikePriceCurrent = StrToNum(StrLeft(StrRight(Name(), 7), 5));
+StrikePriceNext = StrToNum(StrLeft(StrRight(Name(), 9), 5));
+StrikePrice = IIf(IsNextExpirySymbol == 0, StrikePriceCurrent, StrikePriceNext);
+
+// Identify option type (Call or Put)
+OptionType = StrRight(Name(), 2);
+
+// Fetch BankNifty index close price
+BankNiftyIndexClose = Foreign("$BANKNIFTY-NSE", "Close");
+
+// Calculate At-the-Money (ATM) strike prices
+CallATMStrike = round(BankNiftyIndexClose / 100) * 100;
+PutATMStrike = round(BankNiftyIndexClose / 100) * 100;
+
+// Define the Out-of-The-Money (OTM) buffer factor
+OTMBuffer = 0;
+
+// Calculate OTM strikes
+CallOTMStrike = round((CallATMStrike + OTMBuffer) / 100) * 100;
+PutOTMStrike = round((PutATMStrike - OTMBuffer) / 100) * 100;
+
+// Set the moneyness factor
+MoneynessFactor = 1000;
+
+// Define strike selection logic for Calls and Puts
+CallStrikeSelection = IIf(OptionType == "CE" AND StrikePrice >= CallOTMStrike, 1, 0);
+PutStrikeSelection = IIf(OptionType == "PE" AND StrikePrice <= PutOTMStrike, 1, 0);
+
+// Combine strike selection logic
+SelectedStrike = CallStrikeSelection OR PutStrikeSelection;
+
+// Generate a unique identifier for each strike price
+StrikeCode = StrToNum(strmid(Name(), 15, 1)) * 10000 + StrToNum(strmid(Name(), 16, 1)) * 1000 + StrToNum(StrMid(Name(), 17, 1)) * 100;
+
+// Define OTM strike prices for protective positions
+LongCallOTMStrike = CallOTMStrike + MoneynessFactor;
+LongPutOTMStrike = PutOTMStrike - MoneynessFactor;
+
+// Selection logic for long Call and Put protective strikes
+LongCallSelection = IIf(OptionType == "CE" AND StrikePrice == LongCallOTMStrike, 1, 0);
+LongPutSelection = IIf(OptionType == "PE" AND StrikePrice == LongPutOTMStrike, 1, 0);
+
+// Combine protective strike selection logic
+ProtectiveStrikeSelection = LongCallSelection OR LongPutSelection;
+
+_SECTION_END();
