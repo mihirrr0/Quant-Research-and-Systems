@@ -1,0 +1,121 @@
+_SECTION_BEGIN("Price Chart Setup");
+SetChartOptions(0, chartShowArrows | chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Volume " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+Plot(C, "Closing Price", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Line Style") | GetPriceStyle());
+_SECTION_END();
+
+SetOption("InitialEquity", 10000000);
+SetOption("AccountMargin", 100);
+MaxPositions = 4;
+SetOption("MaxOpenPositions", MaxPositions);
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+TimeFrameSet(inDaily);
+#include <WeeklyExpiryDates.afl>
+ExpiryDate = DateTimeConvert(2, WeeklyExpiryDate);
+CurrentDate = DateTimeConvert(2, DateNum());
+DaysUntilExpiry = round(DateTimeDiff(ExpiryDate, CurrentDate) / (3600 * 24));
+TimeFrameRestore();
+
+DTEExpanded = TimeFrameExpand(DaysUntilExpiry, inDaily, expandFirst);
+
+PriceInterval = 1000;
+IndexClose = Foreign("$BANKNIFTY-NSE", "Close");
+ATMStrike = round(IndexClose / 100) * 100;
+
+EquityAllocation = IIf(DTEExpanded == 0 OR DTEExpanded == 1, 5, 3);
+
+LotSize = IIf(DateNum() >= 1110101 AND DateNum() <= 1151029, 25,
+         IIf(DateNum() >= 1151030 AND DateNum() <= 1160630, 30,
+         IIf(DateNum() >= 1160701 AND DateNum() <= 1181025, 40,
+         IIf(DateNum() >= 1181026 AND DateNum() <= 1200730, 20, 25))));
+
+MarginExposure = IndexClose * 2 * 0.02 * LotSize;
+MarginSpan = PriceInterval * LotSize;
+TotalMargin = MarginExposure + MarginSpan;
+LeverageRatio = IIf(DTEExpanded == 0 OR DTEExpanded == 1, 25, 12);
+DepositRequired = (IndexClose * LotSize * 2) / LeverageRatio;
+MinPremiumThreshold = (DepositRequired * (EquityAllocation / 100)) / LotSize;
+
+if (Status("stocknum") == 0) {
+    SymbolsList = CategoryGetSymbols(categoryWatchlist, 1);
+    StaticVarRemove("CallPremiumDifference*");
+
+    for (i = 0; (SymbolName = StrExtract(SymbolsList, i)) != ""; i++) {
+        SetForeign(SymbolName);
+        CurrentLotSize = LotSize;
+        DepositRequired = (IndexClose * CurrentLotSize * 2) / LeverageRatio;
+        MinPremiumThreshold = (DepositRequired * (EquityAllocation / 100)) / CurrentLotSize;
+
+        Strike = StrToNum(StrLeft(StrRight(Name(), 7), 5));
+        OptionType = StrRight(Name(), 2);
+        CallDiff = IIf(OptionType == "CE" AND Strike >= ATMStrike, (100000 - abs(Close - MinPremiumThreshold)), 0);
+        RestorePriceArrays();
+
+        StaticVarSet("CallPremiumDifference" + SymbolName, CallDiff);
+    }
+
+    StaticVarGenerateRanks("CallRanks", "CallPremiumDifference", 0, 1224);
+}
+
+if (Status("stocknum") == 0) {
+    SymbolsList = CategoryGetSymbols(categoryWatchlist, 1);
+    StaticVarRemove("PutPremiumDifference*");
+
+    for (i = 0; (SymbolName = StrExtract(SymbolsList, i)) != ""; i++) {
+        SetForeign(SymbolName);
+        CurrentLotSize = LotSize;
+        DepositRequired = (IndexClose * CurrentLotSize * 2) / LeverageRatio;
+        MinPremiumThreshold = (DepositRequired * (EquityAllocation / 100)) / CurrentLotSize;
+
+        Strike = StrToNum(StrLeft(StrRight(Name(), 7), 5));
+        OptionType = StrRight(Name(), 2);
+        PutDiff = IIf(OptionType == "PE" AND Strike <= ATMStrike, (100000 - abs(Close - MinPremiumThreshold)), 0);
+        RestorePriceArrays();
+
+        StaticVarSet("PutPremiumDifference" + SymbolName, PutDiff);
+    }
+
+    StaticVarGenerateRanks("PutRanks", "PutPremiumDifference", 0, 1224);
+}
+
+CallRank = StaticVarGet("CallRanksCallPremiumDifference" + Name());
+PutRank = StaticVarGet("PutRanksPutPremiumDifference" + Name());
+
+ShortCallStrike = IIf(CallRank == 1, Strike, 0);
+ShortPutStrike = IIf(PutRank == 1, Strike, 0);
+
+CallSignal = IIf(Strike == ShortCallStrike AND OptionType == "CE", 1, 0);
+PutSignal = IIf(Strike == ShortPutStrike AND OptionType == "PE", 1, 0);
+
+TradeSelector = CallSignal OR PutSignal;
+
+MovePercentage = Optimize("MovePercentage", 5, 5, 10, 2.5) / 100;
+
+CallAdjustment = round(ShortCallStrike * MovePercentage / 100) * 100;
+PutAdjustment = round(ShortPutStrike * MovePercentage / 100) * 100;
+
+LongCallStrike = ShortCallStrike + CallAdjustment;
+LongPutStrike = ShortPutStrike - PutAdjustment;
+
+LongCallSignal = IIf(Strike == LongCallStrike AND OptionType == "CE", 1, 0);
+LongPutSignal = IIf(Strike == LongPutStrike AND OptionType == "PE", 1, 0);
+
+LongSelector = LongCallSignal OR LongPutSignal;
+
+ShortTrade = TradeSelector == 1 AND TimeNum() == Entrytime AND DiwaliDates;
+ShortPrice = Close;
+
+CloseTrade = TimeNum() == ExitTime OR exitlastbar OR DateNum() != Ref(DateNum(), 1);
+CloseTradePrice = Close;
+
+ShortTrade = ExRem(ShortTrade, CloseTrade);
+CloseTrade = ExRem(CloseTrade, ShortTrade);
+
+PortfolioEquity = Foreign("~~~EQUITY", "Close");
+
+Filter = 1;
+AddColumn(PortfolioEquity, "Portfolio Equity", 1);
+
+_SECTION_END();
