@@ -1,1 +1,2 @@
-This folder contains AFL scripts for implementing and backtesting the strategy.
+This folder contains the AFL scripts for the backtests
+ 
