@@ -4,7 +4,7 @@ _N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g,
 Plot(C, "Closing Price", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Line Style") | GetPriceStyle());
 _SECTION_END();
 
-#include <BankNifty_StrikePriceLogic.afl>
+#include <BankNifty_StrikeSelector.afl>
 
 SetOption("InitialEquity", 10000000);
 SetOption("AccountMargin", 100);
