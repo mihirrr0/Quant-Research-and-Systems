@@ -1,0 +1,69 @@
+_SECTION_BEGIN("Price");
+
+SetChartOptions(0, chartShowArrows | chartShowDates);
+
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Vol " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+
+Plot(C, "Close", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Style") | GetPriceStyle());
+
+#include <Nifty_Strike_Selector(CO).afl>  
+
+SetOption("InitialEquity", 10000000);
+SetOption("AccountMargin", 100);
+SetOption("MaxOpenPositions", 2);  // Maximum positions at any given time.
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+EntryTime = 124500;  // Fixed entry time.
+ExitTime = 152000;   // Fixed exit time.
+
+bi = BarIndex();
+isLastBar = bi == LastValue(bi - 1);  // Check for the last bar of the data.
+
+// Excluding dates for Diwali holidays.
+ExcludeDiwali = DateNum() != 1111026 AND DateNum() != 1121113 AND DateNum() != 1131103 AND DateNum() != 1141023 AND DateNum() != 1151111 AND DateNum() != 1161030 AND DateNum() != 1171019 AND DateNum() != 1181107 AND DateNum() != 1191027 AND DateNum() != 1200604 AND DateNum() != 1201114 AND DateNum() != 1211104;
+
+EquityPercent = Optimize("Equity Allocation %", 2, 3, 8, 1);
+
+SymbolLength = IIf(StrLen(Name()) == 18, 16, 15);
+
+// Define call and put option symbols and premiums.
+CallSymbol = StrLeft(Name(), SymbolLength) + "CE";
+PutSymbol = StrLeft(Name(), SymbolLength) + "PE";
+CallPremium = Foreign(CallSymbol, "Close");
+PutPremium = Foreign(PutSymbol, "Close");
+
+// Calculating margin requirements and position size.
+LotSize = IIf(DateNum() >= 1110101 AND DateNum() <= 1141031, 50, IIf(DateNum() >= 1141031 AND DateNum() <= 1151030, 25, IIf(DateNum() >= 1151031 AND DateNum() <= 1210531, 75, 50)));
+ExposureMargin = Foreign("$NIFTY-NSE", "C") * 2 * 0.02 * LotSize;
+SpanMargin = Moneyness * LotSize;
+TotalMargin = ExposureMargin + SpanMargin;
+MISLeverage = 12;  // Fixed leverage value for calculation.
+Deposit = (Foreign("$NIFTY-NSE", "C") * LotSize * 2) / MISLeverage;
+MinPremium = (Deposit * (EquityPercent / 100)) / LotSize;
+
+CallFactor = IIf(CallPremium >= MinPremium, 1, CallPremium / MinPremium);
+PutFactor = IIf(PutPremium >= MinPremium, 1, PutPremium / MinPremium);
+PositionSize = IIf(Type == "CE", -CallFactor * EquityPercent, -PutFactor * EquityPercent);
+
+// Entry and exit signals.
+Short = StrikePriceSelector == 1 AND TimeNum() == EntryTime AND ExcludeDiwali;
+ShortPrice = Close;
+
+Cover = TimeNum() == ExitTime OR isLastBar OR DateNum() != Ref(DateNum(), 1);
+CoverPrice = Close;
+
+Short = ExRem(Short, Cover);
+Cover = ExRem(Cover, Short);
+
+// Stop-loss setup.
+StopLoss = IIf(DaysToExpiry == 0, 30, IIf(DaysToExpiry == 1, 40, IIf(DaysToExpiry == 2, 40, IIf(DaysToExpiry == 3, 50, IIf(DaysToExpiry == 6, 40, 50)))));
+ApplyStop(StopTypeloss, stopModePercent, StopLoss, 1);
+
+// Portfolio equity calculation for tracking.
+PortEquity = Foreign("~~~EQUITY", "C");
+
+Filter = 1;
+AddColumn(PortEquity, "Portfolio Equity", 1);
+
+_SECTION_END();
