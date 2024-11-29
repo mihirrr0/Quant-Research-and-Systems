@@ -1,8 +1,5 @@
 # Nifty Intraday Option Selling
 
----
-
-## **Introduction**
 
 This repository focuses on a Nifty Weekly Short Options Intraday Strategy designed for weekly expiries on the Nifty index. The core idea is to sell an out-of-the-money (OTM) or at-the-money (ATM) call and put option with matching expiration dates. A percentage-based stop-loss mechanism is applied on the option premium. Once the stop-loss condition is met for any leg, that specific leg is closed, and any remaining positions are squared off at the end of the trading day.
 
