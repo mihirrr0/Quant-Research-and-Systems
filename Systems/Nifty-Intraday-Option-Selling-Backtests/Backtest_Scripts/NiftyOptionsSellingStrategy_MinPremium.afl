@@ -6,7 +6,7 @@ _N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g,
 Plot(C, "Close", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Style") | GetPriceStyle());
 
 // Strategy settings
-#include <Nifty_Strike_Selector(CO).afl>  // Include strike price selection logic.
+#include <Nifty_Strike_Selector.afl>  // Include strike price selection logic.
 
 SetOption("InitialEquity", 10000000);
 SetOption("AccountMargin", 100);
