@@ -1,0 +1,112 @@
+_SECTION_BEGIN("Price");
+
+// Configure chart display options.
+SetChartOptions(0, chartShowArrows | chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Volume " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+Plot(C, "Close", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Style") | GetPriceStyle());
+
+// Set backtest configurations.
+SetOption("InitialEquity", 10000000);
+SetOption("AccountMargin", 100);
+SetOption("MaxOpenPositions", 4);  // Define maximum simultaneous positions.
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+// Calculate Days to Expiry.
+TimeFrameSet(inDaily);
+#include <WeeklyExpiryDates.afl>
+OptionExpiryDate = DateTimeConvert(2, WeeklyExpiryDate);
+StartDate = DateTimeConvert(2, DateNum());
+DTE = round(DateTimeDiff(OptionExpiryDate, StartDate) / (3600 * 24));
+TimeFrameRestore();
+
+DaysToExpiry = TimeFrameExpand(DTE, inDaily, expandFirst);
+
+// Key strategy parameters.
+Moneyness = 1000;
+NiftyClose = Foreign("$NIFTY-NSE", "C");
+ATM = (round(NiftyClose / 100) * 100);
+POE = IIf(DaysToExpiry <= 1, 5, 3);
+
+// Calculate lot size and margin requirements.
+LotSize = IIf(DateNum() >= 1110101 AND DateNum() <= 1141031, 50, 
+              IIf(DateNum() >= 1141031 AND DateNum() <= 1151030, 25, 
+              IIf(DateNum() >= 1151031 AND DateNum() <= 1210531, 75, 50)));
+
+ExposureMargin = NiftyClose * 2 * 0.02 * LotSize;
+SpanMargin = Moneyness * LotSize;
+TotalMargin = ExposureMargin + SpanMargin;
+MISLeverage = IIf(DaysToExpiry <= 1, 25, 12);
+Deposit = (NiftyClose * LotSize * 2) / MISLeverage;
+MinPremium = (Deposit * (POE / 100)) / LotSize;
+
+// Ranking symbols based on premium differences.
+if (Status("stocknum") == 0) {
+    // Rank calls.
+    List = CategoryGetSymbols(categoryWatchlist, 1);
+    StaticVarRemove("CallPremiumDifference*");
+    for (i = 0; (sym = StrExtract(List, i)) != ""; i++) {
+        SetForeign(sym);
+        StrikePrice = IIf(StrLen(Name()) == 22, StrToNum(StrLeft(StrRight(Name(), 7), 5)), StrToNum(StrLeft(StrRight(Name(), 6), 4)));
+        Type = StrRight(Name(), 2);
+        CallPremiumDiff = IIf(Type == "CE" AND StrikePrice >= round(NiftyClose / 100) * 100, (100000 - abs(Close - MinPremium)), 0);
+        RestorePriceArrays();
+        StaticVarSet("CallPremiumDifference" + sym, CallPremiumDiff);
+    }
+    StaticVarGenerateRanks("CallRank", "CallPremiumDifference", 0, 1224);
+
+    // Rank puts.
+    StaticVarRemove("PutPremiumDifference*");
+    for (i = 0; (sym = StrExtract(List, i)) != ""; i++) {
+        SetForeign(sym);
+        StrikePrice = IIf(StrLen(Name()) == 22, StrToNum(StrLeft(StrRight(Name(), 7), 5)), StrToNum(StrLeft(StrRight(Name(), 6), 4)));
+        Type = StrRight(Name(), 2);
+        PutPremiumDiff = IIf(Type == "PE" AND StrikePrice <= round(NiftyClose / 100) * 100, (100000 - abs(Close - MinPremium)), 0);
+        RestorePriceArrays();
+        StaticVarSet("PutPremiumDifference" + sym, PutPremiumDiff);
+    }
+    StaticVarGenerateRanks("PutRank", "PutPremiumDifference", 0, 1224);
+}
+
+// Selecting the strikes for entry.
+CallRank = StaticVarGet("CallRankCallPremiumDifference" + Name());
+PutRank = StaticVarGet("PutRankPutPremiumDifference" + Name());
+ShortCallStrike = IIf(CallRank == 1, StrikePrice, 0);
+ShortPutStrike = IIf(PutRank == 1, StrikePrice, 0);
+CallStrike = IIf(StrikePrice == ShortCallStrike AND Type == "CE", 1, 0);
+PutStrike = IIf(StrikePrice == ShortPutStrike AND Type == "PE", 1, 0);
+StrikePriceSelector = CallStrike OR PutStrike;
+
+// Adjust long strikes with moneyness.
+Move = Optimize("Move", 2.5, 5, 10, 2.5) / 100;
+CallMoneyness = round(ShortCallStrike * Move / 100) * 100;
+PutMoneyness = round(ShortPutStrike * Move / 100) * 100;
+LongCallStrike = ShortCallStrike + CallMoneyness;
+LongPutStrike = ShortPutStrike - PutMoneyness;
+
+// Define entry/exit signals for short and long positions.
+Cases = Optimize("Cases", 0, 0, 7, 1);
+EntryTimes = array(092000, 094500, 101500, 104500, 111500, 114500, 121500, 124500);
+Entrytime = EntryTimes[Cases];
+ExitTime = 152000;
+
+Short = StrikePriceSelector == 1 AND TimeNum() == Entrytime AND DateNum() != Ref(DateNum(), 1);
+ShortPrice = Close;
+Cover = TimeNum() == ExitTime OR DateNum() != Ref(DateNum(), 1);
+CoverPrice = Close;
+
+// Remove overlapping signals.
+Short = ExRem(Short, Cover);
+Cover = ExRem(Cover, Short);
+
+// Define stop-loss logic.
+StopLoss = IIf(DayOfWeek() == 4, 30, IIf(DayOfWeek() == 3, 40, 50));
+ShortStop = IIf(Short, StopLoss, 100);
+ApplyStop(stopTypeLoss, stopModePercent, ShortStop, 1);
+
+// Portfolio tracking for performance visualization.
+PortEquity = Foreign("~~~EQUITY", "C");
+Filter = 1;
+AddColumn(PortEquity, "Portfolio Equity", 1);
+
+_SECTION_END();
