@@ -1,0 +1,63 @@
+_SECTION_BEGIN("Price");
+
+// Configure chart settings
+SetChartOptions(0, chartShowArrows | chartShowDates);
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Volume " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+Plot(C, "Close", ParamColor("Chart Color", colorDefault), styleNoTitle | ParamStyle("Style") | GetPriceStyle());
+
+// Calculate Days to Expiry
+TimeFrameSet(inDaily);
+#include <WeeklyExpiryDates.afl> // Include external file for expiry date logic
+OptionExpiryDate = DateTimeConvert(2, WeeklyExpiryDate);
+StartDate = DateTimeConvert(2, DateNum());
+DTE = round(DateTimeDiff(OptionExpiryDate, StartDate) / (3600 * 24));
+TimeFrameRestore();
+
+DaysToExpiry = TimeFrameExpand(DTE, inDaily, expandFirst);
+
+// Identify symbols for the next expiry
+NextExpirySymbol = IIf(StrRight(Name(), 2) == "-I", 1, 0);
+
+// Determine strike price and option type
+StrikePrice = IIf(StrLen(Name()) == 18, StrToNum(StrLeft(StrRight(Name(), 7), 5)), StrToNum(StrLeft(StrRight(Name(), 6), 4)));
+OptionType = StrRight(Name(), 2);
+
+// Fetch Nifty closing price and calculate ATM strikes
+NiftyClose = Foreign("$NIFTY-NSE", "Close");
+CallATM = round(NiftyClose / 50) * 50;
+PutATM = round(NiftyClose / 50) * 50;
+
+// Offset parameter for deep OTM selection
+PremiumFactor = 0;
+
+// Define deep OTM strikes
+CallDeepOTM = CallATM + PremiumFactor;
+PutDeepOTM = PutATM - PremiumFactor;
+
+// Selection criteria for call and put options
+CallSelection = IIf(OptionType == "CE" AND StrikePrice == CallDeepOTM, 1, 0);
+PutSelection = IIf(OptionType == "PE" AND StrikePrice == PutDeepOTM, 1, 0);
+
+// Combine call and put selections
+StrikePriceSelector = CallSelection OR PutSelection;
+
+// Additional offset for protective long options
+Moneyness = 0; // Adjustable parameter
+
+// Unique code generation for symbols
+UniqueCode = IIf(StrLen(Name()) == 18,
+    StrToNum(StrMid(Name(), 11, 1)) * 10000 + StrToNum(StrMid(Name(), 12, 1)) * 1000 + StrToNum(StrMid(Name(), 13, 1)) * 100,
+    StrToNum(StrMid(Name(), 11, 1)) * 1000 + StrToNum(StrMid(Name(), 12, 1)) * 100 + StrToNum(StrMid(Name(), 13, 1)) * 10);
+
+// Define strikes for long OTM options
+LongCallOTM = CallDeepOTM + Moneyness;
+LongPutOTM = PutDeepOTM - Moneyness;
+
+// Selection criteria for long options
+LongCallSelection = IIf(OptionType == "CE" AND StrikePrice == LongCallOTM, 1, 0);
+LongPutSelection = IIf(OptionType == "PE" AND StrikePrice == LongPutOTM, 1, 0);
+
+// Combine long call and put selections
+LongStrikePriceSelector = LongCallSelection OR LongPutSelection;
+
+_SECTION_END();
