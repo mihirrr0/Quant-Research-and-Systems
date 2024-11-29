@@ -1,0 +1,104 @@
+_SECTION_BEGIN("Price");
+
+SetChartOptions(0, chartShowArrows | chartShowDates);
+
+_N(Title = StrFormat("{{NAME}} - {{INTERVAL}} {{DATE}} Open %g, High %g, Low %g, Close %g (%.1f%%) Vol " + WriteVal(V, 1.0) + " {{VALUES}}", O, H, L, C, SelectedValue(ROC(C, 1))));
+
+Plot(C, "Close", ParamColor("Color", colorDefault), styleNoTitle | ParamStyle("Style") | GetPriceStyle());
+
+#include <Nifty_Strike_Selector.afl>  
+
+SetOption("InitialEquity", 10000000);
+SetOption("AccountMargin", 100);
+SetOption("MaxOpenPositions", 400);
+
+SetTradeDelays(0, 0, 0, 0);
+SetOption("DisableRuinStop", True);
+
+Scenarios = Optimize("Scenarios", 1, 1, 13, 4);
+
+// Configuring various entry timings for backtesting.
+EntryTimes = array(091500, 093000, 094500, 100000, 101500, 103000, 104500, 110000, 111500, 113000, 114500, 120000, 121500, 123000, 124500, 130000);
+Entrytime = EntryTimes[Scenarios];
+
+ExitTime = 152000;
+
+bi = BarIndex();
+isLastBar = bi == LastValue(bi - 1);
+
+// Filtering for Diwali holiday exclusions.
+IsDiwali = DateNum() != 1111026 AND DateNum() != 1121113 AND DateNum() != 1131103 AND DateNum() != 1141023 AND DateNum() != 1151111 AND DateNum() != 1161030 AND DateNum() != 1171019 AND DateNum() != 1181107 AND DateNum() != 1191027 AND DateNum() != 1201114;
+
+// Determining long positions for strikes.
+CallStrike = ValueWhen(LongStrikePriceSelector == 1 AND Type == "CE", Foreign(StrLeft(Name(), 11) + (Strikeprice - Moneyness) + "CE", "Close"));
+PutStrike = ValueWhen(LongStrikePriceSelector == 1 AND Type == "PE", Foreign(StrLeft(Name(), 11) + (Strikeprice + Moneyness) + "PE", "Close"));
+
+// Configuring lot sizes and equity percentage for position sizing.
+EquityPercent = Optimize("EquityPercent", 5, 3, 8, 1);
+LotSize = IIf(DateNum() >= 1110101 AND DateNum() <= 1141031, 50, IIf(DateNum() >= 1141031 AND DateNum() <= 1151030, 25, IIf(DateNum() >= 1151031 AND DateNum() <= 1210531, 75, 50)));
+
+// Calculating minimum premiums based on leverage.
+MaxLeverage = 10;
+DepositAmount = ((Foreign("$NIFTY-NSE", "C") * LotSize * 2) / MaxLeverage);
+MinimumPremium = (DepositAmount * (EquityPercent / 100)) / LotSize;
+
+// Short and cover signals for the strategy.
+Short = StrikePriceSelector == 1 AND TimeNum() == Entrytime AND IsDiwali;
+ShortPrice = Close;
+
+Cover = TimeNum() == ExitTime OR isLastBar OR DateNum() != Ref(DateNum(), 1);
+CoverPrice = Close;
+
+Short = ExRem(Short, Cover);
+Cover = ExRem(Cover, Short);
+
+// Configuring buy/sell signals for long positions (protective hedges).
+Buy = ((LongStrikePriceSelector == 1 AND TimeNum() == EntryTime AND IsDiwali AND CallStrike < MinimumPremium AND Type == "CE") OR
+       (LongStrikePriceSelector == 1 AND TimeNum() == EntryTime AND IsDiwali AND PutStrike < MinimumPremium AND Type == "PE"));
+BuyPrice = Close;
+
+Sell = TimeNum() == ExitTime OR isLastBar OR DateNum() != Ref(DateNum(), 1);
+SellPrice = Close;
+
+Buy = ExRem(Buy, Sell);
+Sell = ExRem(Sell, Buy);
+
+// Configuring stop-loss rules based on expiration days.
+StopLoss = IIf(DaysToExpiry == 0, 30, IIf(DaysToExpiry == 1, 40, IIf(DaysToExpiry == 2, 40, IIf(DaysToExpiry == 3, 50, IIf(DaysToExpiry == 6, 40, 50)))));
+ApplyStop(StopTypeloss, stopModePercent, StopLoss, 1);
+
+// Custom backtest processor for portfolio management.
+SetCustomBacktestProc("");
+
+if (Status("action") == actionPortfolio) {
+    bo = GetBacktesterObject();
+    bo.PreProcess();
+
+    for (i = 0; i < BarCount; i++) {
+        // Dynamic position size and leverage adjustments for each bar.
+        CurrentEquity = bo.Equity;
+        LeverageFactor = MinPremium / LotSize;
+
+        // Execute entry and exit logic for signals.
+        bo.ProcessTradeSignals(i);
+
+        // Track positions and adjust stop-loss for open positions.
+        for (trade = bo.GetFirstOpenPos(); trade; trade = bo.GetNextOpenPos()) {
+            if (trade.IsLong()) {
+                bo.ExitTrade(i, trade.Symbol, trade.GetPrice(i, "C"), 1);
+            }
+        }
+        bo.UpdateStats(i, 1);
+        bo.UpdateStats(i, 2);
+    }
+
+    bo.PostProcess();
+}
+
+// Portfolio equity tracking for visualization.
+PortEquity = Foreign("~~~EQUITY", "C");
+
+Filter = 1;
+AddColumn(PortEquity, "Portfolio Equity", 1);
+
+_SECTION_END();
