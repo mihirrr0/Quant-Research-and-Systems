@@ -1,0 +1,3 @@
+- The backtests in this folder are invalid due to trades being executed based on an incorrect expiry date of **04/11/2021**.
+- The correct expiry date for the trades should have been **03/11/2021**.
+- As a result, these backtests are considered inaccurate and were not considered for performance evaluation.
