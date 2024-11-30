@@ -37,7 +37,7 @@ Using the trend and noise classifications, I assigned each day to one of six buc
 [![Screenshot-2024-11-24-at-10-06-14-AM.png](https://i.postimg.cc/FHXnK47K/Screenshot-2024-11-24-at-10-06-14-AM.png)](https://postimg.cc/PPKM60bG)
 
 ### 5. Trading System Performance Analysis
-- **Systems Analyzed**: I evaluated the equity curves for specific Bank Nifty systems (SID, PSAR, and Long ON).
+- **Systems Analyzed**: I evaluated the equity curves for specific Bank Nifty systems (SID:Short Intraday Option Selling, PSAR, and Long).
 - **Key Metrics**:
   - **R-squared Threshold**: ≤ 0.3 for choppy markets, > 0.3 for trending markets.
   - **Standard Deviation**: Used to differentiate Bearish, Flat, and Bullish trends based on normalized data.
