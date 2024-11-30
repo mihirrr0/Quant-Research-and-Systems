@@ -53,7 +53,7 @@ For this test:
 
 **9. Filtering Contracts by Premium:**
 To ensure better-quality data:
-- I excluded contracts with a **premium lower than ₹1000** from the backtests. 
+- I excluded contracts with low premiums from the backtests. 
 - This helped focus on more liquid and meaningful trades.
 
 **10. Testing Opening Positions on Different Days:**
