@@ -25,7 +25,7 @@ The primary goal of this strategy is to identify trends using the **PSAR (Parabo
 [![Screenshot-2024-11-29-at-6-20-19-AM.png](https://i.postimg.cc/K8JLLcb0/Screenshot-2024-11-29-at-6-20-19-AM.png)](https://postimg.cc/75Jfrkfz)
 
 ### Optimizations:
-- The analysis used data from **01-06-2016 to 30-11-2022**, sourced from SQL.  
+- The analysis used data from **01-06-2016 to 30-11-2022**, sourced from custom-built SQL database.  
 - I optimized the system for both in-sample and out-of-sample periods, experimenting with acceleration factors ranging from **0.005 to 0.04**. 
 [![Screenshot-2024-11-29-at-6-22-10-AM.png](https://i.postimg.cc/HnyRcP7t/Screenshot-2024-11-29-at-6-22-10-AM.png)](https://postimg.cc/V0zD2ggS) 
 - The strategy was tested under two specific conditions:  
@@ -40,8 +40,9 @@ The primary goal of this strategy is to identify trends using the **PSAR (Parabo
 
 [![Screenshot-2024-11-29-at-6-24-07-AM.png](https://i.postimg.cc/bNRLCh8t/Screenshot-2024-11-29-at-6-24-07-AM.png)](https://postimg.cc/Vddjv2Jf) 
 
+ 
 **Conclusion:**  
-I found it more effective to place trades **after 3:20 PM** to allow options to expire worthless and maximize returns.
+I found it more effective to place trades **after 3:20 PM** to allow current expiry options to expire worthless and the lower volatility impact as a result.
 
 ---
 
@@ -56,7 +57,7 @@ I found it more effective to place trades **after 3:20 PM** to allow options to 
 [![Screenshot-2024-11-29-at-6-26-18-AM.png](https://i.postimg.cc/sD0GD64L/Screenshot-2024-11-29-at-6-26-18-AM.png)](https://postimg.cc/dLrV59XR) 
 
 **Observations:**  
-- Similar optimizations were performed as with Bank Nifty, though the shorter dataset limits the robustness of the results.  
+- Similar optimizations were performed as with Bank Nifty, though the shorter backtest time frame limits the robustness of the results.  
 
 [![Screenshot-2024-11-29-at-6-27-28-AM.png](https://i.postimg.cc/Kj3S78CB/Screenshot-2024-11-29-at-6-27-28-AM.png)](https://postimg.cc/QKDyhh8d)
 
@@ -74,7 +75,7 @@ I found it more effective to place trades **after 3:20 PM** to allow options to 
 [![Screenshot-2024-11-29-at-6-28-17-AM.png](https://i.postimg.cc/qB2zdBNz/Screenshot-2024-11-29-at-6-28-17-AM.png)](https://postimg.cc/z3XJCrSr) 
 
 ### Optimizations:
-- I conducted both in-sample and out-of-sample optimizations and compared the results with weekly data.
+- I conducted both in-sample and out-of-sample optimizations and compared the results with weekly data included.
 
 [![Screenshot-2024-11-29-at-6-30-51-AM.png](https://i.postimg.cc/rpFM7cvR/Screenshot-2024-11-29-at-6-30-51-AM.png)](https://postimg.cc/cvjpnq1d)
 
