@@ -9,7 +9,7 @@ This repository focuses on a Nifty Weekly Short Options Intraday Strategy design
 
 1. **Testing and Implementation:**
    - Initially, I conducted testing on BankNifty options, starting with ATM strikes before moving to OTM and dynamic strikes. The goal was to refine the strategy by introducing dynamic strike selection, primarily based on the minimum premium logic.
-   - For Nifty Weekly Short Options, the strategy was tested using only OTM strikes and dynamic strike selection, avoiding ATM strikes.
+   - For Nifty Weekly Short Options, the strategy was tested using only OTM strikes and dynamic strike selection, avoiding ATM strikes.(only strangles) 
    - The backtesting process was carried out using Nifty’s weekly continuous contracts database. A predefined stop-loss percentage was applied to option premiums to limit risk, while the remaining positions were automatically squared off at the end of the trading day.
 
    Key variables optimized include:
@@ -50,7 +50,7 @@ Here are some of the key experiments and optimizations I tested during developme
 - Testing different levels of protection through long OTM strikes for BankNifty in multiples of 100
 - Using monthly options as protection while selling weekly options
 - Exploring scenarios with no additional leverage or protection when maximum upside is capped
-- Testing ITM short strikes (100)  
+- Testing ITM short strikes (again 100 point strike gaps)  
 - Applying stop-loss methods based on percentage movements or ATR (average true range)
 
 ---
