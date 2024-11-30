@@ -1,7 +1,7 @@
 # BankNifty Intraday Option Selling
 
 
-The **BankNifty Intraday Option Selling** strategy focuses on trading the **Bank Nifty Index**. It involves selling both an **Out-of-The-Money (OTM)** or **At-The-Money (ATM)** Call and Put option, ensuring both have the same expiration date. A percentage-based stop-loss is applied to each position, and if triggered, the position is closed. Any remaining positions are squared off at the end of the trading day. This strategy is the result of my efforts to create a balanced approach that maximizes profitability while keeping risk under control.
+The **BankNifty Intraday Option Selling** strategy focuses on trading the **Bank Nifty Index Contracts**. It involves selling both an **Out-of-The-Money (OTM)** or **At-The-Money (ATM)** Call and Put option, ensuring both have the same expiration date. A percentage-based stop-loss is applied to each position, and if triggered, the position is closed. Any remaining positions are squared off at the end of the trading day. This strategy is the result of my efforts to create a balanced approach that maximizes profitability while keeping risk under control.
 
 ---
 
@@ -30,7 +30,7 @@ The **BankNifty Intraday Option Selling** strategy focuses on trading the **Bank
 - Additionally, I customized stop-loss percentages for each trading day to align with the dynamically selected strikes.
 
 ### 4. Minimum Premium Logic
-- A key feature of this strategy is the **Minimum Premium Logic**, where only option strikes with a premium above a certain threshold are eligible for selling. I implemented this to ensure the selected strikes have enough potential reward to justify the associated risk and margin usage.
+- A key feature of this strategy is the **Minimum Premium Logic**, where only option strikes with a premium above or at a certain threshold are eligible for selling. I implemented this to ensure the selected strikes have enough potential reward to justify the associated risk and margin usage.
 - Position sizing is dynamically tied to this logic, helping to maximize returns while keeping risk within acceptable levels.
 
 ### 5. Testing Protective Options
